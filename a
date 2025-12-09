@@ -1,0 +1,321 @@
+0mCfZCMTqilWw7bo
+
+
+Tablas:
+--------------------------------------------
+Identificación
+------------------------------------------------------------
+aviso(
+    id_aviso, 
+    titulo, 
+    cuerpo
+)
+usuario(
+    id_usuario,
+    nombre_usuario,
+    clave
+)
+
+estado(
+    id_estado
+    estado
+)
+{todos los estados de la republica}
+
+rol(
+    id_rol,
+    nombre
+)
+
+usuario_rol(
+    id_usuario,
+    id_rol,
+    PK(id_usuario, id_rol)
+)
+rol{ADMINISTRADOR,REVISOR,MAESTRO}
+sexo(
+    id_sexo,
+    sexo
+)
+{HOMBRE,MUJER}
+
+profesor(
+    id_profesor,
+    id_usuario(FK),
+    curp,
+    rfc,
+    nombres,
+    primer_apellido,
+    segundo_apellido, 
+    fecha_nacimiento,
+    pais_nacimiento,
+    estado_civil,
+    id_sexo(FK),
+    telefono,
+    id_estado(FK),
+    correo,
+    correo_alternativo,
+    id_disciplina(FK),
+    perfil_deseable
+)
+
+
+-------------------------------------
+Estudio
+--------------------------------------------
+nivel_estudio(
+    id_nivel_estudio
+    nivel_estudio
+    siglas
+)
+nivel_estudio{LICENCIATURA, ESPECIALIDAD, MAESTRIA, DOCTORADO, POSDOCTORADO}
+estudio(
+    id_estudio,
+    id_profesor(FK),
+    id_nivel_estudio(FK),
+    curso_nombre,
+    institucion_otorgante,
+    id_disciplina(FK),
+    id_pais(FK),
+    ruta_titulo,
+    cedula,
+    fecha_inicio,
+    fecha_termino,
+    fecha_obtencion
+
+)
+-------------------------------------
+Trabajo
+--------------------------------------------
+
+dedicacion(
+    id_dedicacion
+    dedicacion
+)
+dedicación{TIEMPO COMPLETO, MEDIO TIEMPO, POR HORAS}
+
+
+//dedicacion no lo controla
+datos_laborales(
+    id_datos_laborales,
+    id_profesor(FK),
+    id_dedicacion(FK),
+    id_disciplina(FK),
+    institucion,
+    ruta_curriculo,
+    nombramiento_actual,
+)
+
+evidencia_ptc(
+    id_evidencia_ptc
+    id_datos_laborales(FK)
+    id_semestre(FK),
+    ruta_horario
+)
+
+semestre(
+    id_semestre
+    clave_semestre
+    anio
+    semestre
+)
+
+------------------
+------------------
+convocatoria(
+    id_convocatoria,
+    id_semestre,
+    descripcion
+    convocatoria
+)
+
+solicitud_convocatoria(
+    id_solicitud_convocatoria,
+    id_profesor(FK),
+    id_convocatoria(FK)
+    fecha_envio,
+    id_estado_solicitud(FK)
+    duración de vigencia --3 o 6 años
+)
+
+estado_solicitud(
+    id_estado_solicitud,
+    estado_solicitud,
+)
+
+perfil_deseable_activo(
+    id_profesor(fk)
+    id_solicitud_convocatoria(FK)
+    fecha_inicio_vigencia
+    fecha_fin_vigencia
+    vencido --boolean
+)
+
+------------------------------
+Producto academico
+--------------------------------
+
+tipo_producto_academico(
+    id_tipo_producto_academico
+    tipo_producto_academico,
+    descripcion
+)
+{
+    ARTICULO INDEXADO,
+    ARTICULO ARBITRADO,
+    LIBRO,
+    CAPITULO DE LIBRO,
+    INFORME TECNICO,
+    PRODUCTIVIDAD INNOVADORA,
+    PROTOTIPO,
+    INNOVACION TECNOLÓGICA,
+    OBRAS ARTISTICAS
+}
+
+estado_validacion(
+    id_estado_validacion,
+    estado_validacion,   
+    descripcion
+)
+estado_validacion{PENDIENTE,APROBADO,RECHAZADO}
+
+producto_academico(
+    id_producto_academico
+    id_tipo_producto_academico(FK)
+    titulo,
+    autores,
+    anio,
+    id_pais(FK),
+    id_estado_validacion(FK),
+    fecha_validacion,
+)
+
+
+profesor_producto_academico(
+    id_profesor(FK),
+    id_producto_academico(FK),
+    PK(id_profesor, id_producto_academico)
+    fecha_registro,         
+    id_estado_validacion(FK),
+)
+
+
+tipo_productividad_innovadora(
+    id_tipo_productividad_innovadora,
+    tipo_productividad_innovadora
+)
+
+
+productividad_innovadora(
+    id_productividad_innovadora
+    id_producto_academico(FK),
+    id_tipo_productividad_innovadora(FK),
+    numero de registro,
+    ruta_contancia de registro,
+)
+
+patente(
+    id_patente
+    id_productividad_innovadora(FK)
+    uso,
+    clasificacion_internacional_patentes 
+)
+modelo_utilidad(
+    id_modelo_utilidad
+    id_productividad_innovadora(FK)
+    uso,
+)
+tipo_creacion(
+    id_tipo_creacion
+    tipo_creacion
+)
+obra_artistica(
+    id_obra_artistica,
+    id_producto_academico(FK),
+    id_tipo_creacion(FK),
+    descripcion_obra,
+    impacto_social_artistico,
+    innovacion_metodologica,
+    lugar_presentacion,
+    ruta_evidencia_documental  
+)
+tipo_innovacion(
+    id_tipo_innovacion
+    tipo_innovacion
+)
+innovacion_tecnologica(
+    id_innovacion_tecnologica,
+    id_producto_academico(FK),
+    id_tipo_innovacion(FK),
+    necesidad_que_cubre,
+    objetivo,
+    impacto_creacion,
+    uso,
+    lugar_implementacion,
+    ruta_informe        
+)
+tipo_prototipo(
+    id_tipo_prototipo
+    tipo_prototipo
+)
+prototipo(
+    id_prototipo,
+    id_producto_academico(FK),
+    id_tipo_prototipo(FK),
+    descripcion_prototipo,
+    objetivo,
+    institucion_destino,
+    ruta_descripcion_desarrollo   // informe PDF desarrollo y beneficios
+)
+informe_tecnico(
+    id_informe_tecnico,
+    id_producto_academico(FK),
+    beneficiario,             // institucion beneficiaria
+    alumnos_participantes,
+    fecha_inicio,
+    fecha_termino,
+    objetivo,
+    ruta_informe_y_carta_aval
+)
+capitulo_libro(
+    id_capitulo_libro,
+    id_producto_academico(FK),
+    titulo_capitulo,
+    autores_capitulo,
+    editorial,
+    isbn,
+    ruta_indice,
+    ruta_portada_capitulo
+)
+libro(
+    id_libro,
+    id_producto_academico(FK),
+    editorial,
+    edicion,             
+    isbn,
+
+    ruta_libro,
+    ruta_hoja_legal,
+)
+articulo_arbitrado(
+    id_articulo_arbitrado,
+    id_producto_academico(FK),
+    nombre_revista,
+    issn,
+    direccion_electronica,
+    descripcion,
+    ruta_portada_revista,
+    ruta_evidencia_autores
+)
+articulo_indexado(
+    id_articulo_indexado,
+    id_producto_academico(FK),
+    nombre_revista,
+    issn,
+    factor_impacto,
+    indice,                  // SCOPUS, JCR, LATINDEX, etc.
+    doi,                     // o direccion_electronica
+    descripcion,
+    ruta_portada_revista,
+    ruta_evidencia_autores
+)
