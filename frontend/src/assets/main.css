@@ -1,0 +1,19 @@
+:root {
+  --sip-navbar: #DF8634;
+  --sip-body: #F0B046;
+  --sip-button: #EB8640;
+  --sip-input: #FFBE00;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--sip-body);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}

@@ -319,3 +319,6 @@ articulo_indexado(
     ruta_portada_revista,
     ruta_evidencia_autores
 )
+
+
+npm run dev

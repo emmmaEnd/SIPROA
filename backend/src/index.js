@@ -3,7 +3,11 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const path = require('path');
+const multer = require('multer');
+const supabase = require('./supabase');
 
+const upload = multer(); // archivos en memoria
 const app = express();
 
 // ─────────────────────────────────────────────
@@ -19,37 +23,7 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 
 // ─────────────────────────────────────────────
-// "Base de datos" temporal en memoria
-// (luego la sustituimos por tu BD real)
-// ─────────────────────────────────────────────
-let users = [];
-let nextId = 1;
-
-// crea usuario con rol maestro por defecto
-function createUser(nombre_usuario, clave_plana, rolesExtra = []) {
-  const existe = users.find(u => u.nombre_usuario === nombre_usuario);
-  if (existe) {
-    throw new Error('El nombre de usuario ya existe');
-  }
-
-  const hash = bcrypt.hashSync(clave_plana, 10);
-
-  const user = {
-    id_usuario: nextId++,
-    nombre_usuario,
-    clave: hash,
-    roles: ['maestro', ...rolesExtra], // maestro básico
-  };
-
-  users.push(user);
-  return user;
-}
-
-// usuario admin de prueba
-const admin = createUser('admin', 'admin123', ['admin']);
-
-// ─────────────────────────────────────────────
-// Helpers de JWT y middlewares
+// Helpers de autenticación
 // ─────────────────────────────────────────────
 function generarToken(user) {
   return jwt.sign(
@@ -59,7 +33,7 @@ function generarToken(user) {
       roles: user.roles,
     },
     JWT_SECRET,
-    { expiresIn: '2h' },
+    { expiresIn: '2h' }
   );
 }
 
@@ -83,9 +57,9 @@ function authMiddleware(req, res, next) {
   }
 }
 
-function requireRole(role) {
+function requireRole(roleName) {
   return (req, res, next) => {
-    if (!req.user || !req.user.roles || !req.user.roles.includes(role)) {
+    if (!req.user || !req.user.roles || !req.user.roles.includes(roleName)) {
       return res.status(403).json({ message: 'No tienes permisos suficientes' });
     }
     next();
@@ -93,11 +67,105 @@ function requireRole(role) {
 }
 
 // ─────────────────────────────────────────────
+// Crear usuario (MAESTRO + roles extra) con supabase-js
+// ─────────────────────────────────────────────
+async function createUser(nombre_usuario, clave_plana, rolesExtra = []) {
+  // 1) Verificar que no exista
+  const { data: existente, error: existeError } = await supabase
+    .from('usuario')
+    .select('id_usuario')
+    .eq('nombre_usuario', nombre_usuario)
+    .maybeSingle();
+
+  if (existeError) {
+    throw new Error('Error verificando usuario: ' + existeError.message);
+  }
+  if (existente) {
+    throw new Error('El nombre de usuario ya existe');
+  }
+
+  // 2) Insertar usuario con contraseña hasheada
+  const hash = bcrypt.hashSync(clave_plana, 10);
+
+  const { data: nuevo, error: insertError } = await supabase
+    .from('usuario')
+    .insert({ nombre_usuario, clave: hash })
+    .select('id_usuario, nombre_usuario')
+    .single();
+
+  if (insertError) {
+    throw new Error('Error insertando usuario: ' + insertError.message);
+  }
+
+  // 3) Asignar roles: MAESTRO + extras
+  const roles = ['MAESTRO', ...rolesExtra];
+
+  for (const nombreRol of roles) {
+    const { data: rol, error: rolError } = await supabase
+      .from('rol')
+      .select('id_rol')
+      .eq('nombre', nombreRol)
+      .maybeSingle();
+
+    if (rolError) {
+      throw new Error('Error buscando rol: ' + rolError.message);
+    }
+    if (!rol) {
+      throw new Error(`El rol "${nombreRol}" no existe en la tabla rol`);
+    }
+
+    const { error: relError } = await supabase
+      .from('usuario_rol')
+      .insert({
+        id_usuario: nuevo.id_usuario,
+        id_rol: rol.id_rol,
+      });
+
+    if (relError) {
+      throw new Error('Error asignando rol: ' + relError.message);
+    }
+  }
+
+  return {
+    id_usuario: nuevo.id_usuario,
+    nombre_usuario: nuevo.nombre_usuario,
+    roles,
+  };
+}
+
+// ─────────────────────────────────────────────
+// Crear usuario admin por defecto si no existe
+// ─────────────────────────────────────────────
+(async () => {
+  try {
+    const { data: admin, error } = await supabase
+      .from('usuario')
+      .select('id_usuario')
+      .eq('nombre_usuario', 'admin')
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error verificando admin:', error.message);
+      return;
+    }
+
+    if (!admin) {
+      await createUser('admin', 'admin123', ['ADMINISTRADOR']);
+      console.log('Usuario admin creado por defecto');
+    } else {
+      console.log('Usuario admin ya existe');
+    }
+  } catch (err) {
+    console.error('Error asegurando usuario admin:', err.message);
+  }
+})();
+
+// ─────────────────────────────────────────────
 // Rutas de autenticación
 // ─────────────────────────────────────────────
 
-// Registro básico: crea usuario con rol maestro
-app.post('/api/register', (req, res) => {
+// Registro (usuario + contraseña) → rol MAESTRO
+app.post('/api/register', async (req, res) => {
   const { nombre_usuario, clave } = req.body;
 
   if (!nombre_usuario || !clave) {
@@ -107,24 +175,20 @@ app.post('/api/register', (req, res) => {
   }
 
   try {
-    const nuevo = createUser(nombre_usuario, clave);
+    const nuevo = await createUser(nombre_usuario, clave);
     const token = generarToken(nuevo);
 
     res.status(201).json({
-      user: {
-        id_usuario: nuevo.id_usuario,
-        nombre_usuario: nuevo.nombre_usuario,
-        roles: nuevo.roles,
-      },
+      user: nuevo,
       token,
     });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(400).json({ message: err.message || 'Error al registrar' });
   }
 });
 
 // Login
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { nombre_usuario, clave } = req.body;
 
   if (!nombre_usuario || !clave) {
@@ -133,39 +197,132 @@ app.post('/api/login', (req, res) => {
     });
   }
 
-  const user = users.find(u => u.nombre_usuario === nombre_usuario);
-  if (!user) {
-    return res.status(401).json({ message: 'Usuario o contraseña incorrectos' });
-  }
+  try {
+    // 1) Buscar usuario
+    const { data: usuarios, error: userError } = await supabase
+      .from('usuario')
+      .select('id_usuario, nombre_usuario, clave')
+      .eq('nombre_usuario', nombre_usuario)
+      .limit(1);
 
-  const ok = bcrypt.compareSync(clave, user.clave);
-  if (!ok) {
-    return res.status(401).json({ message: 'Usuario o contraseña incorrectos' });
-  }
+    if (userError) {
+      console.error(userError);
+      return res.status(500).json({ message: 'Error buscando usuario' });
+    }
 
-  const token = generarToken(user);
-  res.json({
-    user: {
-      id_usuario: user.id_usuario,
-      nombre_usuario: user.nombre_usuario,
-      roles: user.roles,
-    },
-    token,
-  });
+    if (!usuarios || usuarios.length === 0) {
+      return res.status(401).json({ message: 'Usuario o contraseña incorrectos' });
+    }
+
+    const userRow = usuarios[0];
+
+    // 2) Verificar contraseña
+    const ok = bcrypt.compareSync(clave, userRow.clave);
+    if (!ok) {
+      return res.status(401).json({ message: 'Usuario o contraseña incorrectos' });
+    }
+
+    // 3) Obtener roles desde usuario_rol + rol
+    const { data: userRoles, error: relError } = await supabase
+      .from('usuario_rol')
+      .select('id_rol')
+      .eq('id_usuario', userRow.id_usuario);
+
+    if (relError) {
+      console.error(relError);
+      return res.status(500).json({ message: 'Error cargando roles' });
+    }
+
+    let roles = [];
+
+    if (userRoles && userRoles.length > 0) {
+      const roleIds = userRoles.map(r => r.id_rol);
+
+      const { data: rolesRows, error: rolesError } = await supabase
+        .from('rol')
+        .select('id_rol, nombre')
+        .in('id_rol', roleIds);
+
+      if (rolesError) {
+        console.error(rolesError);
+        return res.status(500).json({ message: 'Error cargando nombres de roles' });
+      }
+
+      roles = rolesRows.map(r => r.nombre);
+    }
+
+    const user = {
+      id_usuario: userRow.id_usuario,
+      nombre_usuario: userRow.nombre_usuario,
+      roles,
+    };
+
+    const token = generarToken(user);
+
+    res.json({ user, token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error interno al iniciar sesión' });
+  }
 });
 
-// Página "home" protegida (cualquier usuario logueado)
-app.get('/api/home', authMiddleware, (req, res) => {
+// Usuario actual
+app.get('/api/me', authMiddleware, async (req, res) => {
+  res.json({ user: req.user });
+});
+
+// Home maestro (solo rol MAESTRO)
+app.get('/api/maestro/home', authMiddleware, requireRole('MAESTRO'), (req, res) => {
   res.json({
     message: `Bienvenido a SIPROA, ${req.user.nombre_usuario}`,
     roles: req.user.roles,
   });
 });
 
-// Ruta de ejemplo solo para admin (por los roles)
-app.get('/api/admin-only', authMiddleware, requireRole('admin'), (req, res) => {
-  res.json({ message: 'Solo admins pueden ver esto.' });
-});
+// ─────────────────────────────────────────────
+// Subida de archivos a Supabase Storage
+// ─────────────────────────────────────────────
+// Asegúrate en Supabase de crear un bucket llamado "siproa-evidencias"
+const BUCKET = 'siproa-evidencias';
+
+app.post(
+  '/api/files/upload',
+  authMiddleware,
+  requireRole('MAESTRO'),
+  upload.single('archivo'),
+  async (req, res) => {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ message: 'Archivo requerido' });
+    }
+
+    try {
+      const safeName = file.originalname.replace(/\s+/g, '_');
+      const filePath = `usuario_${req.user.id_usuario}/${Date.now()}_${safeName}`;
+
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+        });
+
+      if (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Error al subir archivo' });
+      }
+
+      const { data } = supabase.storage.from(BUCKET).getPublicUrl(filePath);
+
+      return res.json({
+        path: filePath,
+        url: data.publicUrl,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: 'Error interno al subir archivo' });
+    }
+  }
+);
 
 // ─────────────────────────────────────────────
 // Arrancar servidor
